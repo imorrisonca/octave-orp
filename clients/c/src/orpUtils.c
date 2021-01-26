@@ -79,6 +79,12 @@ void orp_MessagePrint
         { ORP_SYNC_SYN,            "Synchronization, sync" },
         { ORP_SYNC_SYNACK,         "Synchronization, sync-ack" },
         { ORP_SYNC_ACK,            "Synchronization, ack" },
+
+        { ORP_RQST_FILE_DATA,      "Request, File transfer data" },
+        { ORP_RESP_FILE_DATA,      "Response, File transfer data" },
+        { ORP_NTFY_FILE_CONTROL,   "Notification, File transfer control" },
+        { ORP_RESP_FILE_CONTROL,   "Response, File transfer control" },
+
         { ORP_RESP_UNKNOWN_RQST,   "Response, unknown request" },
     };
 
@@ -119,19 +125,30 @@ void orp_MessagePrint
             break;
         }
     }
-    printf("\tType     : %d (%s)\n", message->type, packetName);
-    if (   (message->type !=ORP_NTFY_HANDLER_CALL)
-        && (message->type !=ORP_NTFY_SENSOR_CALL))
+    printf("\tType     : %s\n", packetName);
+    switch (message->type)
     {
-        if (message->type & ORP_RESPONSE_MASK)
-        {
-            printf("\tStatus   : %d (%s)\n", (int)message->status, statusStr[message->status * -1]);
-        }
-        else
-        {
-            printf("\tData type: %d\n", message->dataType);
-        }
+        // Byte[1] is unused on these notification packets
+        case ORP_NTFY_HANDLER_CALL:
+        case ORP_NTFY_SENSOR_CALL:
+            break;
+
+        case ORP_NTFY_FILE_CONTROL:
+            printf("\tEvent    : %d\n", (int)message->status);
+            break;
+
+        default:
+            if (message->type & ORP_RESPONSE_MASK)
+            {
+                printf("\tStatus   : %d (%s)\n", (int)message->status, statusStr[message->status * -1]);
+            }
+            else
+            {
+                printf("\tData type: %d\n", message->dataType);
+            }
+            break;
     }
+
     printf("\tSequence : %u\n", message->sequenceNum);
     if (message->timestamp > 0.0)
     {

@@ -37,6 +37,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "orpClient.h"
+#include "fileTransfer.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -54,6 +55,7 @@ const char helpStr[] =
 \tpush trig|bool|num|str|json <path> <timestamp> [<data>] (note: if <timestamp> = 0, current timestamp will be used)\n\
 \tget <path>\n\
 \texample json <path> [<data>]\n\
+\tfile control|data info|ready|pending|complete|abort [<data>]\n\
 \treply handler|sensor|sync <status>\n\
 ";
 
@@ -72,6 +74,7 @@ enum commandTypeE {
     ORPCLI_CMD_PUSH,
     ORPCLI_CMD_GET,
     ORPCLI_CMD_EXAMPLE,
+    ORPCLI_CMD_FILE,
     ORPCLI_CMD_REPLY,
     ORPCLI_CMD_UNKNOWN
 };
@@ -100,6 +103,8 @@ static enum commandTypeE commandExtract(char **line)
         return ORPCLI_CMD_GET;
     if (!strncasecmp(cmdStr, "example", cmdLen))
         return ORPCLI_CMD_EXAMPLE;
+    if (!strncasecmp(cmdStr, "file", cmdLen))
+        return ORPCLI_CMD_FILE;
     if (!strncasecmp(cmdStr, "reply", cmdLen))
         return ORPCLI_CMD_REPLY;
     if (!strncasecmp(cmdStr, "help", cmdLen))
@@ -409,6 +414,57 @@ static void commandRespond(char *args)
     (void)orp_Respond(responseType, status);
 }
 
+/* Send file data
+ * > file control|data info|ready|pending|complete|abort [<data>]
+ */
+static void commandFileTransfer(char *args)
+{
+    char *argv[6];
+    int argc;
+    char *argsEnd = args + strlen(args);
+    char *data = NULL;
+
+    /* !!! Only parse the first 2 args.  The 3rd is data, which may contain
+     * spaces.  We deal with the data arg separately, below
+     */
+    argc = string2Args(args, argv, 2);
+    if (!checkArgCount(argc, 2, 2))
+    {
+        return;
+    }
+    // Point to the data string, if present
+    argv[argc] = argv[argc - 1] + strlen(argv[argc - 1]) + 1;
+    if (argv[argc] < argsEnd)
+    {
+        data = argv[argc];
+    }
+
+    // Control (notification) packets require an event value for byte[1]
+    if ('c' == tolower(argv[0][0]))
+    {
+        // ready|pending|complete|abort|none
+        unsigned int event;
+        switch (tolower(argv[1][0]))
+        {
+            case 'i': event = FILE_TRANSFER_EVENT_INFO; break;
+            case 'r': event = FILE_TRANSFER_EVENT_READY; break;
+            case 'p': event = FILE_TRANSFER_EVENT_PENDING; break;
+            case 'c': event = FILE_TRANSFER_EVENT_COMPLETE; break;
+            case 'a': event = FILE_TRANSFER_EVENT_ABORT; break;
+            default: printf("Unrecognized event: %s\n", argv[0]); return;
+        }
+        (void)orp_FileTransferNotify(event, data);
+    }
+    else if ('d' == tolower(argv[0][0]))
+    {
+        (void)orp_FileTransferData(0, data);
+    }
+    else
+    {
+        printf("Unrecognized type: %s\n", argv[0]);
+    }
+}
+
 /* > help
  */
 static void commandHelp(char *args)
@@ -429,6 +485,7 @@ bool commandDispatch(char *request)
             case ORPCLI_CMD_PUSH:    commandPush(request); break;
             case ORPCLI_CMD_GET:     commandGet(request); break;
             case ORPCLI_CMD_EXAMPLE: commandExample(request); break;
+            case ORPCLI_CMD_FILE:    commandFileTransfer(request); break;
             case ORPCLI_CMD_REPLY:   commandRespond(request); break;
             case ORPCLI_CMD_HELP:    commandHelp(request); break;
             case ORPCLI_CMD_QUIT:    return false;

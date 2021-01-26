@@ -629,3 +629,47 @@ le_result_t orp_Respond
     orp_MessageInit(&message, type, status);
     return orp_ClientMessageSend(&message);
 }
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send a file transfer notification (a control message)
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t orp_FileTransferNotify
+(
+    unsigned int status,
+    const char *controlData
+)
+{
+    struct orp_Message message;
+
+    orp_MessageInit(&message, ORP_NTFY_FILE_CONTROL, status);
+    if (controlData)
+    {
+        message.data = (void *)controlData;
+        message.dataLen = strlen(controlData);
+    }
+    return orp_ClientMessageSend(&message);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send file transfer data
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t orp_FileTransferData
+(
+    unsigned int status,
+    const char *fileData
+)
+{
+    struct orp_Message message;
+
+    orp_MessageInit(&message, ORP_RQST_FILE_DATA, status);
+    if (fileData)
+    {
+        message.data = (void *)fileData;
+        message.dataLen = strlen(fileData);
+    }
+    return orp_ClientMessageSend(&message);
+}
