@@ -55,8 +55,8 @@ const char helpStr[] =
 \tpush trig|bool|num|str|json <path> <timestamp> [<data>] (note: if <timestamp> = 0, current timestamp will be used)\n\
 \tget <path>\n\
 \texample json <path> [<data>]\n\
-\tfile control|data info|ready|pending|complete|abort [<data>]\n\
 \treply handler|sensor|sync <status>\n\
+\tfile control|data info|ready|pending|suspend|resume|complete|abort [<data>]\n\
 ";
 
 
@@ -406,6 +406,14 @@ static void commandRespond(char *args)
     {
         responseType = ORP_SYNC_SYNACK;
     }
+    else if (!strncasecmp(argv[0], "data", strlen(argv[0])))
+    {
+        responseType = ORP_RESP_FILE_DATA;
+    }
+    else if (!strncasecmp(argv[0], "control", strlen(argv[0])))
+    {
+        responseType = ORP_RESP_FILE_CONTROL;
+    }
     else
     {
         printf("Unknown response type %s\n", argv[0]);
@@ -442,16 +450,41 @@ static void commandFileTransfer(char *args)
     // Control (notification) packets require an event value for byte[1]
     if ('c' == tolower(argv[0][0]))
     {
-        // ready|pending|complete|abort|none
+        // info | ready | pending | suspend | resume | complete | abort
         unsigned int event;
-        switch (tolower(argv[1][0]))
+        const char *eventStr = argv[1];
+        if (!strncasecmp(eventStr, "info", strlen(eventStr)))
         {
-            case 'i': event = FILE_TRANSFER_EVENT_INFO; break;
-            case 'r': event = FILE_TRANSFER_EVENT_READY; break;
-            case 'p': event = FILE_TRANSFER_EVENT_PENDING; break;
-            case 'c': event = FILE_TRANSFER_EVENT_COMPLETE; break;
-            case 'a': event = FILE_TRANSFER_EVENT_ABORT; break;
-            default: printf("Unrecognized event: %s\n", argv[0]); return;
+            event = FILES_TRANSFER_EVENT_INFO;
+        }
+        else if (!strncasecmp(eventStr, "ready", strlen(eventStr)))
+        {
+            event = FILES_TRANSFER_EVENT_READY;
+        }
+        else if (!strncasecmp(eventStr, "pending", strlen(eventStr)))
+        {
+            event = FILES_TRANSFER_EVENT_PENDING;
+        }
+        else if (!strncasecmp(eventStr, "suspend", strlen(eventStr)))
+        {
+            event = FILES_TRANSFER_EVENT_SUSPEND;
+        }
+        else if (!strncasecmp(eventStr, "resume", strlen(eventStr)))
+        {
+            event = FILES_TRANSFER_EVENT_RESUME;
+        }
+        else if (!strncasecmp(eventStr, "complete", strlen(eventStr)))
+        {
+            event = FILES_TRANSFER_EVENT_COMPLETE;
+        }
+        else if (!strncasecmp(eventStr, "abort", strlen(eventStr)))
+        {
+            event = FILES_TRANSFER_EVENT_ABORT;
+        }
+        else
+        {
+            printf("Unknown response type %s\n", eventStr);
+            return;
         }
         (void)orp_FileTransferNotify(event, data);
     }

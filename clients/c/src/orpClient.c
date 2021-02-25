@@ -624,6 +624,9 @@ le_result_t orp_Respond
         case ORP_RESP_SENSOR_CALL: break;
         case ORP_SYNC_SYNACK: break;
         case ORP_SYNC_ACK: break;
+        case ORP_RESP_FILE_DATA: break;
+        case ORP_RESP_FILE_CONTROL: break;
+        
         default: return LE_BAD_PARAMETER;
     }
     orp_MessageInit(&message, type, status);
