@@ -111,9 +111,9 @@
 #define  ORP_PKT_RESP_SENSOR_CALL    'B'   // type[1] status[1] pad[2]
 
 // Version 2
-#define  ORP_PKT_SYNC_SYN            'Y'   // type[1] version[1] sequence[2] time[] sent[] received[]
-#define  ORP_PKT_SYNC_SYNACK         'y'   // type[1] unused[1]  sequence[2] sent[] received[]
-#define  ORP_PKT_SYNC_ACK            'z'   // type[1] unused[1]  sequence[2] sent[] received[]
+#define  ORP_PKT_SYNC_SYN            'Y'   // type[1] version[1] sequence[2] time[] sent[] received[] mtu[]
+#define  ORP_PKT_SYNC_SYNACK         'y'   // type[1] version[1] sequence[2] sent[] received[] mtu[]
+#define  ORP_PKT_SYNC_ACK            'z'   // type[1] unused[1]  sequence[2]
 
 #define  ORP_PKT_RQST_FILE_DATA      'T'   // type[1] unused[1]  sequence[2] data[]
 #define  ORP_PKT_RESP_FILE_DATA      't'   // type[1] status[1]  sequence[2]

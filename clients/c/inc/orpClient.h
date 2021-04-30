@@ -184,6 +184,22 @@ int orp_Respond
     int status
 );
 
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send a sync packet
+ */
+//--------------------------------------------------------------------------------------------------
+int orp_SyncSend
+(
+    enum orp_PacketType type,
+    int version,
+    int sentCount,
+    int recvCount,
+    int mtu
+);
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Send a file transfer notification (a control message)
@@ -194,6 +210,7 @@ int orp_FileTransferNotify
     unsigned int status,
     const char *controlData
 );
+
 
 //--------------------------------------------------------------------------------------------------
 /**

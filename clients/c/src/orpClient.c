@@ -253,10 +253,17 @@ static le_result_t orp_ClientMessageSend
     size_t   packetBufferLen = sizeof(txPacketBuf);
     uint8_t *frameBuffer = txFrameBuf;
     size_t   frameBufferSize = sizeof(txFrameBuf);
+    bool     syncMessage = false;
 
-
-    // Set sequence number
-    message->sequenceNum = sequenceNum;
+    // Set sequence number if this is anything other than a sync packet
+    if (ORP_SYNC_SYN == message->type || ORP_SYNC_SYNACK == message->type || ORP_SYNC_ACK == message->type)
+    {
+        syncMessage = true;
+    }
+    else
+    {
+        message->sequenceNum = sequenceNum;
+    }
 
     // Encode the packet
     if (!orp_Encode(packetBuffer, &packetBufferLen, message))
@@ -284,7 +291,10 @@ static le_result_t orp_ClientMessageSend
         goto err;
     }
 
-    sequenceNum++;
+    if (!syncMessage)
+    {
+        sequenceNum++;
+    }
     return LE_OK;
 
 err:
@@ -622,14 +632,44 @@ le_result_t orp_Respond
     {
         case ORP_RESP_HANDLER_CALL: break;
         case ORP_RESP_SENSOR_CALL: break;
-        case ORP_SYNC_SYNACK: break;
-        case ORP_SYNC_ACK: break;
         case ORP_RESP_FILE_DATA: break;
         case ORP_RESP_FILE_CONTROL: break;
-        
         default: return LE_BAD_PARAMETER;
     }
     orp_MessageInit(&message, type, status);
+    return orp_ClientMessageSend(&message);
+}
+
+//--------------------------------------------------------------------------------------------------
+/**
+ * Send a sync packet
+ */
+//--------------------------------------------------------------------------------------------------
+le_result_t orp_SyncSend
+(
+    enum orp_PacketType type,
+    int version,
+    int sentCount,
+    int recvCount,
+    int mtu
+)
+{
+    struct orp_Message message;
+
+    switch (type)
+    {
+        case ORP_SYNC_SYN:    break;
+        case ORP_SYNC_SYNACK: break;
+        case ORP_SYNC_ACK:    break;
+        default: return LE_BAD_PARAMETER;
+    }
+
+    orp_MessageInit(&message, type, LE_OK);
+    message.version = version;
+    message.sentCount = sentCount;
+    message.receivedCount = recvCount;
+    message.mtu = mtu;
+
     return orp_ClientMessageSend(&message);
 }
 

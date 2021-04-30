@@ -36,6 +36,8 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include "orpClient.h"
 #include "fileTransfer.h"
 
@@ -52,11 +54,13 @@ const char helpStr[] =
 \tcreate input|output|sensor  trig|bool|num|str|json <path> [<units>]\n\
 \tdelete resource|handler|sensor <path>\n\
 \tadd handler <path>\n\
-\tpush trig|bool|num|str|json <path> <timestamp> [<data>] (note: if <timestamp> = 0, current timestamp will be used)\n\
+\tpush trig|bool|num|str|json <path> <timestamp> [<data>] (note: if <timestamp> = 0, current timestamp is used)\n\
 \tget <path>\n\
 \texample json <path> [<data>]\n\
-\treply handler|sensor|sync <status>\n\
-\tfile control|data info|ready|pending|suspend|resume|complete|abort [<data>]\n\
+\treply handler|sensor|control|data <status>\n\
+\tsync syn|synack|ack [-v] [-s] [-r] [-m]\n\
+\tfile control info|ready|start|suspend|resume [<private data>]\n\
+\tfile data [<data>]\n\
 ";
 
 
@@ -76,6 +80,7 @@ enum commandTypeE {
     ORPCLI_CMD_EXAMPLE,
     ORPCLI_CMD_FILE,
     ORPCLI_CMD_REPLY,
+    ORPCLI_CMD_SYNC,
     ORPCLI_CMD_UNKNOWN
 };
 
@@ -107,6 +112,8 @@ static enum commandTypeE commandExtract(char **line)
         return ORPCLI_CMD_FILE;
     if (!strncasecmp(cmdStr, "reply", cmdLen))
         return ORPCLI_CMD_REPLY;
+    if (!strncasecmp(cmdStr, "sync", cmdLen))
+        return ORPCLI_CMD_SYNC;
     if (!strncasecmp(cmdStr, "help", cmdLen))
         return ORPCLI_CMD_HELP;
     if (!strncasecmp(cmdStr, "quit", cmdLen))
@@ -369,7 +376,7 @@ static void commandExample(char *args)
 }
 
 /* Respond to a notification or unsolicited packet
- * > reply resource|sensor|syn|synack <status>
+ * > reply handler|sensor|control|data <status>
  */
 static void commandRespond(char *args)
 {
@@ -398,14 +405,6 @@ static void commandRespond(char *args)
     {
         responseType = ORP_RESP_SENSOR_CALL;
     }
-    else if (!strncasecmp(argv[0], "syn", strlen(argv[0])))
-    {
-        responseType = ORP_SYNC_ACK;
-    }
-    else if (!strncasecmp(argv[0], "synack", strlen(argv[0])))
-    {
-        responseType = ORP_SYNC_SYNACK;
-    }
     else if (!strncasecmp(argv[0], "data", strlen(argv[0])))
     {
         responseType = ORP_RESP_FILE_DATA;
@@ -422,8 +421,11 @@ static void commandRespond(char *args)
     (void)orp_Respond(responseType, status);
 }
 
-/* Send file data
- * > file control|data info|ready|pending|complete|abort [<data>]
+/* Send file control or data packet
+ * Control:
+ * > file control info|ready|pending|start|suspend|resume|abort [<private data>]
+ * Data:
+ * file data <data>
  */
 static void commandFileTransfer(char *args)
 {
@@ -455,35 +457,35 @@ static void commandFileTransfer(char *args)
         const char *eventStr = argv[1];
         if (!strncasecmp(eventStr, "info", strlen(eventStr)))
         {
-            event = FILES_TRANSFER_EVENT_INFO;
+            event = FILETRANSFER_EVENT_INFO;
         }
         else if (!strncasecmp(eventStr, "ready", strlen(eventStr)))
         {
-            event = FILES_TRANSFER_EVENT_READY;
+            event = FILETRANSFER_EVENT_READY;
         }
         else if (!strncasecmp(eventStr, "pending", strlen(eventStr)))
         {
-            event = FILES_TRANSFER_EVENT_PENDING;
+            event = FILETRANSFER_EVENT_PENDING;
+        }
+        else if (!strncasecmp(eventStr, "start", strlen(eventStr)))
+        {
+            event = FILETRANSFER_EVENT_START;
         }
         else if (!strncasecmp(eventStr, "suspend", strlen(eventStr)))
         {
-            event = FILES_TRANSFER_EVENT_SUSPEND;
+            event = FILETRANSFER_EVENT_SUSPEND;
         }
         else if (!strncasecmp(eventStr, "resume", strlen(eventStr)))
         {
-            event = FILES_TRANSFER_EVENT_RESUME;
-        }
-        else if (!strncasecmp(eventStr, "complete", strlen(eventStr)))
-        {
-            event = FILES_TRANSFER_EVENT_COMPLETE;
+            event = FILETRANSFER_EVENT_RESUME;
         }
         else if (!strncasecmp(eventStr, "abort", strlen(eventStr)))
         {
-            event = FILES_TRANSFER_EVENT_ABORT;
+            event = FILETRANSFER_EVENT_ABORT;
         }
         else
         {
-            printf("Unknown response type %s\n", eventStr);
+            printf("Unknown file control event %s\n", eventStr);
             return;
         }
         (void)orp_FileTransferNotify(event, data);
@@ -496,6 +498,79 @@ static void commandFileTransfer(char *args)
     {
         printf("Unrecognized type: %s\n", argv[0]);
     }
+}
+
+/* Send one of the SYNC type packets
+ * > sync syn|synack [-v <version>] [-s <sent count>] [-r <received count>] [-m <mtu>]
+ * > sync ack
+ */
+static void commandSync(char *args)
+{
+    char *argv[8];
+    int argc = 0;
+
+    int version   =  0;
+    int sentCount = -1;  // -1 will not be encoded
+    int recvCount = -1;
+    int mtu       = -1;
+
+    argc = string2Args(args, argv, 8);
+    if (!checkArgCount(argc, 1, 8))
+    {
+        return;
+    }
+
+    // syn | synack | ack
+    enum orp_PacketType syncType;
+    if (!strncasecmp(argv[0], "syn", strlen(argv[0])))
+    {
+        syncType = ORP_SYNC_SYN;
+    }
+    else if (!strncasecmp(argv[0], "synack", strlen(argv[0])))
+    {
+        syncType = ORP_SYNC_SYNACK;
+    }
+    else if (!strncasecmp(argv[0], "ack", strlen(argv[0])))
+    {
+        syncType = ORP_SYNC_ACK;
+    }
+    else
+    {
+        printf("Unknown sync type %s\n", argv[0]);
+        return;
+    }
+
+    optind = 1;
+    opterr = 0;
+    int c;
+    while ((c = getopt (argc, argv, "v:s:r:m:")) != -1)
+    {
+        switch (c)
+        {
+            case 'v': version = (int)strtoul(optarg, NULL, 0);   break;
+            case 's': sentCount = (int)strtoul(optarg, NULL, 0); break;
+            case 'r': recvCount = (int)strtoul(optarg, NULL, 0); break;
+            case 'm': mtu = (int)strtoul(optarg, NULL, 0);       break;
+
+            case '?':
+            {
+                if (strchr("vsrm", optopt))
+                {
+                    printf("Option %c requires value\n", optopt);
+                }
+                else
+                {
+                    printf("Unhandled option %c\n", isalnum(optopt) ? optopt : ' ');
+                }
+                return;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    (void)orp_SyncSend(syncType, version, sentCount, recvCount, mtu);
 }
 
 /* > help
@@ -520,6 +595,7 @@ bool commandDispatch(char *request)
             case ORPCLI_CMD_EXAMPLE: commandExample(request); break;
             case ORPCLI_CMD_FILE:    commandFileTransfer(request); break;
             case ORPCLI_CMD_REPLY:   commandRespond(request); break;
+            case ORPCLI_CMD_SYNC:    commandSync(request); break;
             case ORPCLI_CMD_HELP:    commandHelp(request); break;
             case ORPCLI_CMD_QUIT:    return false;
             default:
