@@ -40,7 +40,7 @@
 #include <unistd.h>
 #include "orpClient.h"
 #include "fileTransfer.h"
-
+#include "orpFile.h"
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -59,7 +59,8 @@ const char helpStr[] =
 \texample json <path> [<data>]\n\
 \treply handler|sensor|control|data <status>\n\
 \tsync syn|synack|ack [-v] [-s] [-r] [-m]\n\
-\tfile control info|ready|start|suspend|resume [<private data>]\n\
+\tfile control info|ready|pending|suspend|resume|abort [<private data>]\n\
+\tfile control start [-f <filename> [-a] [-s <file size>]]\n\
 \tfile data [<data>]\n\
 ";
 
@@ -423,13 +424,15 @@ static void commandRespond(char *args)
 
 /* Send file control or data packet
  * Control:
- * > file control info|ready|pending|start|suspend|resume|abort [<private data>]
+ * > file control info|ready|pending|suspend|resume|abort [<private data>]
+ * > file control start [-f <filename> [-a] [-s <file size>]]
+ * 
  * Data:
- * file data <data>
+ * > file data <data>
  */
 static void commandFileTransfer(char *args)
 {
-    char *argv[6];
+    char *argv[8];
     int argc;
     char *argsEnd = args + strlen(args);
     char *data = NULL;
@@ -452,7 +455,7 @@ static void commandFileTransfer(char *args)
     // Control (notification) packets require an event value for byte[1]
     if ('c' == tolower(argv[0][0]))
     {
-        // info | ready | pending | suspend | resume | complete | abort
+        // info | ready | pending | start | suspend | resume | complete | abort
         unsigned int event;
         const char *eventStr = argv[1];
         if (!strncasecmp(eventStr, "info", strlen(eventStr)))
@@ -488,6 +491,58 @@ static void commandFileTransfer(char *args)
             printf("Unknown file control event %s\n", eventStr);
             return;
         }
+
+        if (FILETRANSFER_EVENT_START == event)
+        {
+            // This is a start request, so the format is known.  Extract the remaining args.
+            // Start of the remaining string
+            args = argv[argc - 1] + strlen(argv[argc - 1]) + 1;
+            argc += string2Args(args, argv + argc, 6);
+            if (!checkArgCount(argc, 2, 8))
+            {
+                return;
+            }
+
+            // Handle optional arguments for start command
+            char filename[128] = { '\0' };
+            int fileSize = -1;  // -1 Not specified - default
+            bool autoAck = false;
+            data = filename;
+
+            optind = 1;
+            opterr = 0;
+            int c;
+            while ((c = getopt(argc, argv, "f:s:a")) != -1)
+            {
+                switch (c)
+                {
+                    case 'f': snprintf(filename, sizeof(filename), "%s", optarg); break;
+                    case 's': fileSize = (int)strtoul(optarg, NULL, 0); break;
+                    case 'a': autoAck = true;                           break;
+                    case '?':
+                        if (strchr("s", optopt) || strchr("f", optopt))
+                        {
+                            printf("Option %c requires value\n", optopt);
+                        }
+                        else if (strchr("a", optopt))
+                        {
+                            printf("Option %c takes no value\n", optopt);
+                        }
+                        else
+                        {
+                            printf("Unhandled option %c\n", isalnum(optopt) ? optopt : ' ');
+                        }
+                        return;
+
+                    default: break;
+                }
+            }
+            if (strlen(filename))
+            {
+                orp_FileDataSetup(filename, fileSize, autoAck);
+            }
+        }
+
         (void)orp_FileTransferNotify(event, data);
     }
     else if ('d' == tolower(argv[0][0]))
@@ -543,7 +598,7 @@ static void commandSync(char *args)
     optind = 1;
     opterr = 0;
     int c;
-    while ((c = getopt (argc, argv, "v:s:r:m:")) != -1)
+    while ((c = getopt(argc, argv, "v:s:r:m:")) != -1)
     {
         switch (c)
         {

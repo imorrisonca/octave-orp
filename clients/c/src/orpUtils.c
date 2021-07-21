@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "orpUtils.h"
+#include "orpFile.h"
 
 
 //--------------------------------------------------------------------------------------------------
@@ -160,6 +161,10 @@ void orp_MessagePrint
     }
     if (message->data && message->dataLen)
     {
-        printf("\tData     : %s\n", (char *)message->data);
+        // In case of file transfer, do not print data which can be binary
+        if (message->type != ORP_RQST_FILE_DATA)
+        {
+            printf("\tData     : %s\n", (char *)message->data);
+        }
     }
 }

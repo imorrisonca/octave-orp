@@ -37,6 +37,7 @@
 #include "orpUtils.h"
 #include "hdlc.h"
 #include "legato.h"
+#include "orpFile.h"
 
 
 /* Buffers:
@@ -374,12 +375,29 @@ static size_t orp_Deframe
         }
 
         printf("\nReceived:");
-        printf(" '%c%c%01X%01X%s', (%zu bytes)",
-               rxPacketBuf[0], rxPacketBuf[1], rxPacketBuf[2], rxPacketBuf[3], &rxPacketBuf[4], rxPacketLen);
+        if (message.type != ORP_RQST_FILE_DATA)
+        {
+            printf(" '%c%c%01X%01X%s', (%zu bytes)",
+                   rxPacketBuf[0], rxPacketBuf[1], rxPacketBuf[2], rxPacketBuf[3], &rxPacketBuf[4], rxPacketLen);
+        }
+        else
+        {
+            // Auto-ack file transfer data, if using auto mode
+            if (orp_FileTransferGetAuto())
+            {
+                (void)orp_Respond(ORP_RESP_FILE_DATA, 0);
+            }
+            orp_FileDataCache(message.data, message.dataLen);
+
+            printf(" '%c%c%01X%01X', (%zu bytes)",
+                   rxPacketBuf[0], rxPacketBuf[1], rxPacketBuf[2], rxPacketBuf[3], rxPacketLen);
+        }
         printf("\n");
         orp_MessagePrint(&message);
 
         orp_Dispatch(&message);
+
+        printf("\norp > ");
 
         // Reset hdlc context and packet length for the next frame
         hdlc_Init(&rxHdlcContext);
@@ -630,11 +648,25 @@ le_result_t orp_Respond
 
     switch (type)
     {
-        case ORP_RESP_HANDLER_CALL: break;
-        case ORP_RESP_SENSOR_CALL: break;
-        case ORP_RESP_FILE_DATA: break;
-        case ORP_RESP_FILE_CONTROL: break;
-        default: return LE_BAD_PARAMETER;
+        case ORP_RESP_HANDLER_CALL: 
+            break;
+
+        case ORP_RESP_SENSOR_CALL: 
+            break;
+
+        case ORP_RESP_FILE_DATA:
+            if (LE_OK == status)
+            {
+                // Data is being accepted, flush to file if required
+                orp_FileDataFlush();
+            }
+            break;
+
+        case ORP_RESP_FILE_CONTROL: 
+            break;
+
+        default: 
+            return LE_BAD_PARAMETER;
     }
     orp_MessageInit(&message, type, status);
     return orp_ClientMessageSend(&message);
